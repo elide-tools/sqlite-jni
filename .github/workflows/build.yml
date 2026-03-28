@@ -1,0 +1,161 @@
+name: Build SQLite3 + JNI
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux-gnu
+            artifact: libsqlite3elide-linux-amd64
+            make_args: ""
+
+          - os: ubuntu-latest
+            target: aarch64-linux-gnu
+            artifact: libsqlite3elide-linux-arm64
+            make_args: "CROSS_HOST=aarch64-linux-gnu"
+            cross: true
+
+          - os: ubuntu-latest
+            target: x86_64-linux-musl
+            artifact: libsqlite3elide-linux-amd64-musl
+            make_args: "MUSL=yes"
+            musl: true
+
+          - os: macos-latest
+            target: arm64-apple-darwin
+            artifact: libsqlite3elide-macos-arm64
+            make_args: ""
+
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: libsqlite3elide-macos-amd64
+            make_args: ""
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: sqlite3elide-windows-amd64
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: "Setup: JDK"
+        uses: actions/setup-java@v4
+        with:
+          distribution: oracle
+          java-version: '25'
+
+      - name: "Setup: Cross-compiler (ARM64)"
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: "Setup: musl-tools"
+        if: matrix.musl
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: "Build: SQLite (Unix)"
+        if: runner.os != 'Windows'
+        run: make install ${{ matrix.make_args }} VERBOSE=yes
+
+      - name: "Build: SQLite (Windows)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Locate Visual Studio and enter developer shell
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" `
+              -latest -property installationPath
+          Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation
+
+          cd sqlite
+
+          # Generate the amalgamation
+          nmake /f Makefile.msc clean
+          nmake /f Makefile.msc sqlite3.c
+
+          # Append JNI source to the amalgamation
+          Get-Content sqlite3.c, ..\jni\sqlite3jni.c | Set-Content sqlite3elide.c
+          Remove-Item sqlite3.c
+          Rename-Item sqlite3elide.c sqlite3.c
+
+          # Copy JNI and JDK headers
+          Copy-Item ..\jni\sqlite3jni.h .
+          Copy-Item "$env:JAVA_HOME\include\jni.h" .
+          Copy-Item "$env:JAVA_HOME\include\win32\jni_md.h" .
+
+          # Build the static library
+          nmake /f Makefile.msc `
+              libsqlite3.lib `
+              USE_CRT_DLL=0 `
+              USE_NATIVE_LIBPATHS=1 `
+              "OPTS=-DSQLITE_CORE=1 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DISABLE_PAGECACHE_OVERFLOW_STATS=1 -DSQLITE_ENABLE_API_ARMOR=1 -DSQLITE_ENABLE_COLUMN_METADATA=1 -DSQLITE_ENABLE_DBSTAT_VTAB=1 -DSQLITE_ENABLE_FTS3=1 -DSQLITE_ENABLE_FTS3_PARENTHESIS=1 -DSQLITE_ENABLE_FTS5=1 -DSQLITE_ENABLE_LOAD_EXTENSION=1 -DSQLITE_ENABLE_MATH_FUNCTIONS=0 -DSQLITE_ENABLE_RTREE=1 -DSQLITE_ENABLE_STAT4=1 -DSQLITE_HAVE_ISNAN=1 -DSQLITE_MAX_ATTACHED=25 -DSQLITE_MAX_COLUMN=32767 -DSQLITE_MAX_FUNCTION_ARG=127 -DSQLITE_MAX_LENGTH=2147483647 -DSQLITE_MAX_MMAP_SIZE=1099511627776 -DSQLITE_MAX_PAGE_COUNT=4294967294 -DSQLITE_MAX_SQL_LENGTH=1073741824 -DSQLITE_MAX_VARIABLE_NUMBER=250000 -DSQLITE_THREADSAFE=1 -DSQLITE_GVM_STATIC=1"
+
+          Rename-Item libsqlite3.lib sqlite3elide.lib
+
+          # Create output layout
+          cd ..
+          New-Item -ItemType Directory -Path out\lib -Force | Out-Null
+          New-Item -ItemType Directory -Path out\include -Force | Out-Null
+          Copy-Item sqlite\sqlite3elide.lib out\lib\
+          Copy-Item sqlite\sqlite3.h out\include\
+          Copy-Item sqlite\sqlite3ext.h out\include\
+          Copy-Item jni\sqlite3jni.h out\include\
+
+      - name: "Package"
+        shell: bash
+        run: tar -czf ${{ matrix.artifact }}.tgz -C out .
+
+      - name: "Upload artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tgz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: "Download all artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: "Resolve release metadata"
+        id: meta
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Extract SQLite version and date from tag: v<version>-<YYYYMMDD>
+          SQLITE_VERSION=$(echo "$TAG" | sed 's/^v//; s/-[0-9]\{8\}$//')
+          RELEASE_DATE=$(echo "$TAG" | grep -oE '[0-9]{8}$')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sqlite_version=$SQLITE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_date=$RELEASE_DATE" >> "$GITHUB_OUTPUT"
+
+      - name: "Create release"
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "SQLite ${{ steps.meta.outputs.sqlite_version }} (${{ steps.meta.outputs.release_date }})"
+          files: artifacts/**/*.tgz
+          generate_release_notes: true

@@ -1,0 +1,5 @@
+[submodule "sqlite"]
+	path = sqlite
+	url = https://github.com/sqlite/sqlite.git
+	shallow = true
+	ignore = dirty

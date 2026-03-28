@@ -1,0 +1,27 @@
+# Build outputs
+/out/
+
+# SQLite build artifacts (generated inside submodule)
+/sqlite/install/
+/sqlite/Makefile
+/sqlite/sqlite3.c
+/sqlite/sqlite3.o
+/sqlite/sqlite3
+/sqlite/sqlite3jni.c
+/sqlite/sqlite3jni.h
+/sqlite/jni.h
+/sqlite/jni_md.h
+/sqlite/libsqlite3*
+/sqlite/sqlite3elide*
+/sqlite/config.log
+/sqlite/config.h
+/sqlite/jimsh
+/sqlite/lemon
+/sqlite/mkkeywordhash
+/sqlite/mksourceid
+/sqlite/src-verify
+/sqlite/*.dSYM/
+
+# OS
+.DS_Store
+Thumbs.db
