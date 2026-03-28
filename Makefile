@@ -44,6 +44,18 @@ ARCH ?= $(shell uname -m)
 UNAME_P := $(shell uname -p)
 JOBS ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
+# When cross-compiling, override ARCH/UNAME_P to match the target so that
+# arch-specific CFLAGS are chosen for the target, not the build host.
+ifdef CROSS_HOST
+  ifneq (,$(findstring aarch64,$(CROSS_HOST)))
+    override ARCH := aarch64
+    override UNAME_P := arm
+  else ifneq (,$(findstring x86_64,$(CROSS_HOST)))
+    override ARCH := x86_64
+    override UNAME_P := x86_64
+  endif
+endif
+
 # ---- Verbosity ----
 
 ifeq ($(VERBOSE),yes)

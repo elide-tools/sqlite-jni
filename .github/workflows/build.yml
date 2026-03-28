@@ -37,7 +37,7 @@ jobs:
             artifact: libsqlite3elide-macos-arm64
             make_args: ""
 
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             artifact: libsqlite3elide-macos-amd64
             make_args: ""
