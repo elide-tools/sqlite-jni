@@ -2,6 +2,8 @@ name: Build SQLite3 + JNI
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
