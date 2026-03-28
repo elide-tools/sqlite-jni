@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write       # Sigstore OIDC keyless signing
+  attestations: write   # GitHub build attestations
 
 jobs:
   build:
@@ -62,6 +64,9 @@ jobs:
         with:
           distribution: oracle
           java-version: '25'
+
+      - name: "Setup: Cosign"
+        uses: sigstore/cosign-installer@v4
 
       - name: "Setup: Cross-compiler (ARM64)"
         if: matrix.cross
@@ -127,11 +132,41 @@ jobs:
         shell: bash
         run: tar -czf ${{ matrix.artifact }}.tgz -C out .
 
-      - name: "Upload artifact"
+      # ---- Supply-chain security ----
+
+      - name: "Sign: Sigstore"
+        shell: bash
+        run: cosign sign-blob --yes --bundle ${{ matrix.artifact }}.tgz.bundle ${{ matrix.artifact }}.tgz
+
+      - name: "SBOM: Generate"
+        uses: anchore/sbom-action@v0
+        with:
+          path: out/
+          format: cyclonedx-json
+          output-file: ${{ matrix.artifact }}.sbom.json
+          upload-artifact: false
+
+      - name: "Attest: Build Provenance (SLSA)"
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ matrix.artifact }}.tgz
+
+      - name: "Attest: SBOM"
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ matrix.artifact }}.tgz
+          sbom-path: ${{ matrix.artifact }}.sbom.json
+
+      # ---- Upload ----
+
+      - name: "Upload artifacts"
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.tgz
+          path: |
+            ${{ matrix.artifact }}.tgz
+            ${{ matrix.artifact }}.tgz.bundle
+            ${{ matrix.artifact }}.sbom.json
 
   release:
     needs: build
@@ -159,5 +194,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "SQLite ${{ steps.meta.outputs.sqlite_version }} (${{ steps.meta.outputs.release_date }})"
-          files: artifacts/**/*.tgz
+          files: |
+            artifacts/**/*.tgz
+            artifacts/**/*.tgz.bundle
+            artifacts/**/*.sbom.json
           generate_release_notes: true
