@@ -180,9 +180,9 @@ jobs:
         id: meta
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          # Extract SQLite version and date from tag: v<version>-<YYYYMMDD>
-          SQLITE_VERSION=$(echo "$TAG" | sed 's/^v//; s/-[0-9]\{8\}$//')
-          RELEASE_DATE=$(echo "$TAG" | grep -oE '[0-9]{8}$')
+          # Extract SQLite version and date from tag: v<version>-<YYYYMMDD>[.rev]
+          SQLITE_VERSION=$(echo "$TAG" | sed 's/^v//; s/-[0-9]\{8\}.*//')
+          RELEASE_DATE=$(echo "$TAG" | grep -oE '[0-9]{8}')
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "sqlite_version=$SQLITE_VERSION" >> "$GITHUB_OUTPUT"
           echo "release_date=$RELEASE_DATE" >> "$GITHUB_OUTPUT"
