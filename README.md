@@ -4,7 +4,7 @@ Pre-built SQLite3 static library with Elide's JNI extensions baked into the amal
 
 ## SQLite Version
 
-**3.51.1** (pinned via git submodule at `sqlite/`)
+**3.54.1** (pinned via git submodule at `sqlite/`)
 
 ## Supported Platforms
 
@@ -32,7 +32,7 @@ include/
 
 ## Versioning
 
-Tags follow the format `v<sqlite-version>-<YYYYMMDD>`, e.g. `v3.51.1-20260328`. The SQLite version tracks upstream; the date suffix is the release date. Pushing a tag triggers CI to build all platforms and create a GitHub Release with artifacts attached.
+Tags follow the format `v<sqlite-version>-<YYYYMMDD>`, e.g. `v3.54.1-20261106`. The SQLite version tracks upstream; the date suffix is the release date. Pushing a tag triggers CI to build all platforms and create a GitHub Release with artifacts attached.
 
 ## Building Locally
 
