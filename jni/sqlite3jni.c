@@ -739,6 +739,73 @@ JNIEXPORT void JNICALL sqlite_busy_1handler(
     change_busy_handler(env, nativeDB, busyHandler);
 }
 
+/* ---- Elide: SQL authorizer (sqlite3_set_authorizer) ------------------------------------------ */
+
+struct AuthorizerContext {
+    JavaVM *vm;
+    jobject obj;
+    jmethodID authorize;
+};
+
+static jstring authorizerArg(JNIEnv *env, const char *arg) {
+    return arg ? (*env)->NewStringUTF(env, arg) : NULL;
+}
+
+static int authorizerCallBack(void *ctx, int action, const char *a1, const char *a2,
+                              const char *a3, const char *a4) {
+    JNIEnv *env = 0;
+    struct AuthorizerContext *auth = (struct AuthorizerContext *) ctx;
+    (*(auth->vm))->AttachCurrentThread(auth->vm, (void **)&env, 0);
+
+    jstring s1 = authorizerArg(env, a1);
+    jstring s2 = authorizerArg(env, a2);
+    jstring s3 = authorizerArg(env, a3);
+    jstring s4 = authorizerArg(env, a4);
+    jint rc = (*env)->CallIntMethod(env, auth->obj, auth->authorize, (jint) action, s1, s2, s3, s4);
+    if ((*env)->ExceptionCheck(env)) {
+        // A throwing callback must not leak a pending exception into SQLite: deny instead.
+        (*env)->ExceptionClear(env);
+        rc = SQLITE_DENY;
+    }
+    if (s1) (*env)->DeleteLocalRef(env, s1);
+    if (s2) (*env)->DeleteLocalRef(env, s2);
+    if (s3) (*env)->DeleteLocalRef(env, s3);
+    if (s4) (*env)->DeleteLocalRef(env, s4);
+    return rc;
+}
+
+JNIEXPORT jlong JNICALL sqlite_set_1authorizer(
+    JNIEnv *env, jclass clazz, jobject nativeDB, jobject authorizer) {
+    sqlite3 *db = gethandle(env, nativeDB);
+    if (!db) {
+        throwex_db_closed(env);
+        return 0;
+    }
+    jclass cls = (*env)->GetObjectClass(env, authorizer);
+    jmethodID mth = (*env)->GetMethodID(env, cls, "authorize",
+        "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I");
+    (*env)->DeleteLocalRef(env, cls);
+    if (!mth) return 0; // NoSuchMethodError is pending
+
+    struct AuthorizerContext *auth = (struct AuthorizerContext *) malloc(sizeof(struct AuthorizerContext));
+    (*env)->GetJavaVM(env, &auth->vm);
+    auth->obj = (*env)->NewGlobalRef(env, authorizer);
+    auth->authorize = mth;
+    sqlite3_set_authorizer(db, &authorizerCallBack, auth);
+    return fromref(auth);
+}
+
+JNIEXPORT void JNICALL sqlite_clear_1authorizer(
+    JNIEnv *env, jclass clazz, jobject nativeDB, jlong handle) {
+    struct AuthorizerContext *auth = (struct AuthorizerContext *) toref(handle);
+    sqlite3 *db = gethandle(env, nativeDB);
+    if (db) sqlite3_set_authorizer(db, NULL, NULL);
+    if (auth) {
+        (*env)->DeleteGlobalRef(env, auth->obj);
+        free(auth);
+    }
+}
+
 JNIEXPORT jlong JNICALL sqlite_prepare_1utf8(
         JNIEnv *env, jobject this, jbyteArray sql)
 {

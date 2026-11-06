@@ -130,6 +130,22 @@ JNIEXPORT void JNICALL sqlite_busy_1handler
   (JNIEnv *, jobject, jobject);
 
 /*
+ * Class:     dev_elide_db_sqlite3_NativeAuthorizer
+ * Method:    set_authorizer
+ * Signature: (Lorg/sqlite/core/NativeDB;Ldev/elide/db/sqlite3/NativeAuthorizer$Callback;)J
+ */
+JNIEXPORT jlong JNICALL sqlite_set_1authorizer
+  (JNIEnv *, jclass, jobject, jobject);
+
+/*
+ * Class:     dev_elide_db_sqlite3_NativeAuthorizer
+ * Method:    clear_authorizer
+ * Signature: (Lorg/sqlite/core/NativeDB;J)V
+ */
+JNIEXPORT void JNICALL sqlite_clear_1authorizer
+  (JNIEnv *, jclass, jobject, jlong);
+
+/*
  * Class:     org_sqlite_core_NativeDB
  * Method:    prepare_utf8
  * Signature: ([B)J
